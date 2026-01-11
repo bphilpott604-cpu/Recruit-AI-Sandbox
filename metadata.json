@@ -1,0 +1,5 @@
+{
+  "name": "RecruitAI Sandbox",
+  "description": "Transform messy hiring notes into polished LinkedIn job descriptions and deep-dive interview guides using Gemini 3 Pro with high-reasoning thinking mode.",
+  "requestFramePermissions": []
+}
