@@ -40,10 +40,13 @@ const App: React.FC = () => {
             </div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">RecruitAI <span className="text-indigo-600 font-normal">Sandbox</span></h1>
           </div>
-          <div className="hidden md:flex gap-4 text-sm text-slate-500 font-medium">
+          <div className="hidden md:flex gap-4 text-sm text-slate-500 font-medium items-center">
             <span>JD Generator</span>
             <span>Interview Architect</span>
             <span>LinkedIn Optimized</span>
+            <a href="#/slideshow-manager" className="ml-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors font-semibold">
+              TV Slideshows
+            </a>
           </div>
         </div>
       </header>
