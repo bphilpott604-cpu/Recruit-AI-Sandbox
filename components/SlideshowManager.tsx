@@ -1,23 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Slideshow, GymLocation, Slide } from '../types';
-import * as svc from '../services/slideshowService';
+import * as api from '../services/api';
 
 type View = 'dashboard' | 'edit-slideshow';
 
-const SlideshowManager: React.FC = () => {
+const SlideshowManager: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [view, setView] = useState<View>('dashboard');
-  const [slideshows, setSlideshows] = useState<Slideshow[]>([]);
-  const [gyms, setGyms] = useState<GymLocation[]>([]);
+  const [slideshows, setSlideshows] = useState<any[]>([]);
+  const [gyms, setGyms] = useState<any[]>([]);
   const [editingSlideshowId, setEditingSlideshowId] = useState<string | null>(null);
+  const [editingSlideshow, setEditingSlideshow] = useState<any | null>(null);
 
-  const reload = () => {
-    setSlideshows(svc.getSlideshows());
-    setGyms(svc.getGyms());
+  const reload = async () => {
+    const [ss, gs] = await Promise.all([api.getSlideshows(), api.getGyms()]);
+    setSlideshows(ss);
+    setGyms(gs);
+  };
+
+  const loadSlideshow = async (id: string) => {
+    const ss = await api.getSlideshow(id);
+    setEditingSlideshow(ss);
   };
 
   useEffect(() => { reload(); }, []);
 
-  const editingSlideshow = slideshows.find(s => s.id === editingSlideshowId) ?? null;
+  const handleEditSlideshow = async (id: string) => {
+    setEditingSlideshowId(id);
+    await loadSlideshow(id);
+    setView('edit-slideshow');
+  };
+
+  const handleLogout = async () => {
+    await api.logout();
+    onLogout();
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -34,12 +49,18 @@ const SlideshowManager: React.FC = () => {
               <p className="text-xs text-slate-400">Manage slideshows across all gym locations</p>
             </div>
           </div>
-          {view === 'edit-slideshow' && (
-            <button onClick={() => { setView('dashboard'); reload(); }} className="text-sm text-slate-500 hover:text-slate-800 flex items-center gap-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-              Back to Dashboard
+          <div className="flex items-center gap-3">
+            {view === 'edit-slideshow' && (
+              <button onClick={() => { setView('dashboard'); reload(); }} className="text-sm text-slate-500 hover:text-slate-800 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                Back
+              </button>
+            )}
+            <button onClick={handleLogout} className="text-sm text-slate-400 hover:text-red-500 flex items-center gap-1 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+              Sign Out
             </button>
-          )}
+          </div>
         </div>
       </header>
 
@@ -49,11 +70,14 @@ const SlideshowManager: React.FC = () => {
             slideshows={slideshows}
             gyms={gyms}
             onReload={reload}
-            onEditSlideshow={(id) => { setEditingSlideshowId(id); setView('edit-slideshow'); }}
+            onEditSlideshow={handleEditSlideshow}
           />
         )}
         {view === 'edit-slideshow' && editingSlideshow && (
-          <SlideshowEditor slideshow={editingSlideshow} onUpdate={reload} />
+          <SlideshowEditor
+            slideshow={editingSlideshow}
+            onUpdate={() => editingSlideshowId && loadSlideshow(editingSlideshowId)}
+          />
         )}
       </main>
     </div>
@@ -63,8 +87,8 @@ const SlideshowManager: React.FC = () => {
 // --- Dashboard ---
 
 interface DashboardProps {
-  slideshows: Slideshow[];
-  gyms: GymLocation[];
+  slideshows: any[];
+  gyms: any[];
   onReload: () => void;
   onEditSlideshow: (id: string) => void;
 }
@@ -76,44 +100,44 @@ const Dashboard: React.FC<DashboardProps> = ({ slideshows, gyms, onReload, onEdi
   const [newGymName, setNewGymName] = useState('');
   const [newGymAddress, setNewGymAddress] = useState('');
 
-  const handleCreateSlideshow = () => {
+  const handleCreateSlideshow = async () => {
     if (!newSlideshowName.trim()) return;
-    svc.createSlideshow(newSlideshowName.trim());
+    await api.createSlideshow(newSlideshowName.trim());
     setNewSlideshowName('');
     setShowNewSlideshow(false);
     onReload();
   };
 
-  const handleCreateGym = () => {
+  const handleCreateGym = async () => {
     if (!newGymName.trim()) return;
-    svc.addGym(newGymName.trim(), newGymAddress.trim());
+    await api.addGym(newGymName.trim(), newGymAddress.trim());
     setNewGymName('');
     setNewGymAddress('');
     setShowNewGym(false);
     onReload();
   };
 
-  const handleAssignSlideshow = (gymId: string, slideshowId: string | null) => {
-    svc.updateGym(gymId, { assignedSlideshowId: slideshowId });
+  const handleAssignSlideshow = async (gymId: string, slideshowId: string | null) => {
+    await api.updateGym(gymId, { assignedSlideshowId: slideshowId });
     onReload();
   };
 
-  const handleDeleteSlideshow = (id: string) => {
+  const handleDeleteSlideshow = async (id: string) => {
     if (confirm('Delete this slideshow? It will be unassigned from any gyms.')) {
-      svc.deleteSlideshow(id);
+      await api.deleteSlideshow(id);
       onReload();
     }
   };
 
-  const handleDeleteGym = (id: string) => {
+  const handleDeleteGym = async (id: string) => {
     if (confirm('Remove this gym location?')) {
-      svc.deleteGym(id);
+      await api.deleteGym(id);
       onReload();
     }
   };
 
-  const getDisplayUrl = (gymId: string) => {
-    return `${window.location.origin}${window.location.pathname}#/display/${gymId}`;
+  const getDisplayUrl = (displayToken: string) => {
+    return `${window.location.origin}${window.location.pathname}#/display/${displayToken}`;
   };
 
   return (
@@ -155,8 +179,8 @@ const Dashboard: React.FC<DashboardProps> = ({ slideshows, gyms, onReload, onEdi
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {slideshows.map(s => {
-              const assignedGyms = gyms.filter(g => g.assignedSlideshowId === s.id);
+            {slideshows.map((s: any) => {
+              const assignedGyms = gyms.filter((g: any) => g.assigned_slideshow_id === s.id);
               return (
                 <div key={s.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between mb-3">
@@ -166,23 +190,9 @@ const Dashboard: React.FC<DashboardProps> = ({ slideshows, gyms, onReload, onEdi
                     </button>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
-                    <span>{s.slides.length} slide{s.slides.length !== 1 ? 's' : ''}</span>
+                    <span>{s.slide_count} slide{s.slide_count !== 1 ? 's' : ''}</span>
                     <span>{assignedGyms.length} gym{assignedGyms.length !== 1 ? 's' : ''}</span>
                   </div>
-                  {s.slides.length > 0 && (
-                    <div className="flex gap-1 mb-4 overflow-hidden rounded-lg h-16">
-                      {s.slides.slice(0, 4).map(slide => (
-                        <div key={slide.id} className="flex-1 bg-slate-100 overflow-hidden">
-                          <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" />
-                        </div>
-                      ))}
-                      {s.slides.length > 4 && (
-                        <div className="flex-1 bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-500">
-                          +{s.slides.length - 4}
-                        </div>
-                      )}
-                    </div>
-                  )}
                   <button
                     onClick={() => onEditSlideshow(s.id)}
                     className="w-full py-2 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
@@ -242,8 +252,8 @@ const Dashboard: React.FC<DashboardProps> = ({ slideshows, gyms, onReload, onEdi
           </div>
         ) : (
           <div className="space-y-3">
-            {gyms.map(g => {
-              const assigned = slideshows.find(s => s.id === g.assignedSlideshowId);
+            {gyms.map((g: any) => {
+              const assigned = slideshows.find((s: any) => s.id === g.assigned_slideshow_id);
               return (
                 <div key={g.id} className="bg-white rounded-xl border border-slate-200 p-5">
                   <div className="flex items-center justify-between flex-wrap gap-4">
@@ -253,19 +263,19 @@ const Dashboard: React.FC<DashboardProps> = ({ slideshows, gyms, onReload, onEdi
                     </div>
                     <div className="flex items-center gap-3">
                       <select
-                        value={g.assignedSlideshowId ?? ''}
+                        value={g.assigned_slideshow_id ?? ''}
                         onChange={e => handleAssignSlideshow(g.id, e.target.value || null)}
                         className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
                         <option value="">No slideshow assigned</option>
-                        {slideshows.map(s => (
+                        {slideshows.map((s: any) => (
                           <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                       </select>
-                      {g.assignedSlideshowId && (
+                      {g.assigned_slideshow_id && (
                         <button
                           onClick={() => {
-                            const url = getDisplayUrl(g.id);
+                            const url = getDisplayUrl(g.display_token);
                             navigator.clipboard.writeText(url);
                             alert(`TV display URL copied!\n\n${url}\n\nOpen this URL on the gym TV's browser.`);
                           }}
@@ -283,7 +293,7 @@ const Dashboard: React.FC<DashboardProps> = ({ slideshows, gyms, onReload, onEdi
                   {assigned && (
                     <div className="mt-3 flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg w-fit">
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                      Playing: {assigned.name} ({assigned.slides.length} slides)
+                      Playing: {assigned.name} ({assigned.slide_count} slides)
                     </div>
                   )}
                 </div>
@@ -299,54 +309,55 @@ const Dashboard: React.FC<DashboardProps> = ({ slideshows, gyms, onReload, onEdi
 // --- Slideshow Editor ---
 
 interface SlideshowEditorProps {
-  slideshow: Slideshow;
+  slideshow: any;
   onUpdate: () => void;
 }
 
 const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }) => {
-  const [slides, setSlides] = useState<Slide[]>(slideshow.slides);
+  const [slides, setSlides] = useState<any[]>(slideshow.slides || []);
   const [name, setName] = useState(slideshow.name);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const saveSlides = (updated: Slide[]) => {
-    setSlides(updated);
-    svc.updateSlideshow(slideshow.id, { slides: updated });
-    onUpdate();
-  };
+  useEffect(() => {
+    setSlides(slideshow.slides || []);
+    setName(slideshow.name);
+  }, [slideshow]);
 
-  const saveName = (n: string) => {
+  const saveName = async (n: string) => {
     setName(n);
-    svc.updateSlideshow(slideshow.id, { name: n });
-    onUpdate();
+    await api.updateSlideshow(slideshow.id, n);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    setUploading(true);
     for (const file of Array.from(files) as File[]) {
       if (!file.type.startsWith('image/')) continue;
-      const dataUrl = await svc.fileToDataUrl(file);
-      const newSlide: Slide = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      const dataUrl = await api.fileToDataUrl(file);
+      await api.addSlide(slideshow.id, {
         title: file.name.replace(/\.[^.]+$/, ''),
-        imageUrl: dataUrl,
         description: '',
         durationSeconds: 8,
-        createdAt: new Date().toISOString(),
-      };
-      slides.push(newSlide);
+        imageData: dataUrl,
+      });
     }
-    saveSlides([...slides]);
+    setUploading(false);
+    onUpdate();
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleRemoveSlide = (id: string) => {
-    saveSlides(slides.filter(s => s.id !== id));
+  const handleRemoveSlide = async (id: string) => {
+    await api.deleteSlide(slideshow.id, id);
+    onUpdate();
   };
 
-  const handleUpdateSlide = (id: string, updates: Partial<Pick<Slide, 'title' | 'description' | 'durationSeconds'>>) => {
-    saveSlides(slides.map(s => s.id === id ? { ...s, ...updates } : s));
+  const handleUpdateSlide = async (id: string, updates: { title?: string; description?: string; durationSeconds?: number }) => {
+    await api.updateSlide(slideshow.id, id, updates);
+    // Update local state immediately for responsiveness
+    setSlides(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
   };
 
   const handleDragStart = (index: number) => {
@@ -363,17 +374,23 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
     setDragIndex(index);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = async () => {
     setDragIndex(null);
-    saveSlides([...slides]);
+    await api.reorderSlides(slideshow.id, slides.map(s => s.id));
   };
 
-  const moveSlide = (index: number, direction: -1 | 1) => {
+  const moveSlide = async (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= slides.length) return;
     const reordered = [...slides];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-    saveSlides(reordered);
+    setSlides(reordered);
+    await api.reorderSlides(slideshow.id, reordered.map(s => s.id));
+  };
+
+  const getImageUrl = (slide: any) => {
+    // Server returns image_path like "uploads/abc.png", serve from /uploads/
+    return `/${slide.image_path}`;
   };
 
   return (
@@ -381,7 +398,8 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
       <div className="flex items-center gap-4">
         <input
           value={name}
-          onChange={e => saveName(e.target.value)}
+          onChange={e => setName(e.target.value)}
+          onBlur={e => saveName(e.target.value)}
           className="text-2xl font-bold text-slate-800 bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-emerald-500 outline-none px-1 py-1 transition-colors"
         />
         <span className="text-sm text-slate-400">{slides.length} slide{slides.length !== 1 ? 's' : ''}</span>
@@ -389,14 +407,26 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
 
       {/* Upload area */}
       <div
-        onClick={() => fileInputRef.current?.click()}
-        className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 transition-colors"
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${uploading ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-300 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50'}`}
       >
-        <svg className="w-10 h-10 mx-auto text-slate-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <p className="text-sm text-slate-500 font-medium">Click to upload images</p>
-        <p className="text-xs text-slate-400 mt-1">PNG, JPG, or GIF. Multiple files supported.</p>
+        {uploading ? (
+          <>
+            <svg className="w-10 h-10 mx-auto text-emerald-400 mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p className="text-sm text-emerald-600 font-medium">Uploading...</p>
+          </>
+        ) : (
+          <>
+            <svg className="w-10 h-10 mx-auto text-slate-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p className="text-sm text-slate-500 font-medium">Click to upload images</p>
+            <p className="text-xs text-slate-400 mt-1">PNG, JPG, or GIF. Multiple files supported.</p>
+          </>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -414,7 +444,7 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
         </div>
       ) : (
         <div className="space-y-3">
-          {slides.map((slide, index) => (
+          {slides.map((slide: any, index: number) => (
             <div
               key={slide.id}
               draggable
@@ -436,20 +466,20 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
 
               {/* Thumbnail */}
               <div className="w-32 h-20 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
-                <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" />
+                <img src={getImageUrl(slide)} alt={slide.title} className="w-full h-full object-cover" />
               </div>
 
               {/* Details */}
               <div className="flex-1 space-y-2">
                 <input
-                  value={slide.title}
-                  onChange={e => handleUpdateSlide(slide.id, { title: e.target.value })}
+                  defaultValue={slide.title}
+                  onBlur={e => handleUpdateSlide(slide.id, { title: e.target.value })}
                   className="w-full text-sm font-medium text-slate-800 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-emerald-500 outline-none px-1"
                   placeholder="Slide title"
                 />
                 <input
-                  value={slide.description}
-                  onChange={e => handleUpdateSlide(slide.id, { description: e.target.value })}
+                  defaultValue={slide.description}
+                  onBlur={e => handleUpdateSlide(slide.id, { description: e.target.value })}
                   className="w-full text-xs text-slate-500 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-emerald-500 outline-none px-1"
                   placeholder="Optional description"
                 />
@@ -459,8 +489,8 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
                     type="number"
                     min={1}
                     max={120}
-                    value={slide.durationSeconds}
-                    onChange={e => handleUpdateSlide(slide.id, { durationSeconds: parseInt(e.target.value) || 8 })}
+                    defaultValue={slide.duration_seconds}
+                    onBlur={e => handleUpdateSlide(slide.id, { durationSeconds: parseInt(e.target.value) || 8 })}
                     className="w-16 text-xs px-2 py-1 border border-slate-200 rounded text-center focus:ring-1 focus:ring-emerald-500 outline-none"
                   />
                   <span className="text-xs text-slate-400">seconds</span>

@@ -1,50 +1,45 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Slide, Slideshow } from '../types';
-import * as svc from '../services/slideshowService';
+import * as api from '../services/api';
 
 interface SlideshowDisplayProps {
-  gymId: string;
+  token: string;
 }
 
-const POLL_INTERVAL_MS = 30_000; // check for updates every 30 seconds
+const POLL_INTERVAL_MS = 30_000;
 
-const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ gymId }) => {
-  const [slideshow, setSlideshow] = useState<Slideshow | null>(null);
+const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
+  const [slideshow, setSlideshow] = useState<any | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fade, setFade] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>('');
 
-  // Load slideshow data
-  const loadSlideshow = useCallback(() => {
-    const ss = svc.getSlideshowForGym(gymId);
+  const loadSlideshow = useCallback(async () => {
+    const ss = await api.getDisplaySlideshow(token);
     if (!ss) {
-      setError('No slideshow assigned to this location.');
+      setError('No slideshow assigned to this display.');
       setSlideshow(null);
       return;
     }
-    if (ss.slides.length === 0) {
+    if (!ss.slides || ss.slides.length === 0) {
       setError('Slideshow has no slides yet.');
       setSlideshow(null);
       return;
     }
-    // If slideshow was updated, reset to beginning
-    if (ss.updatedAt !== lastUpdated) {
+    if (ss.updated_at !== lastUpdated) {
       setCurrentIndex(0);
-      setLastUpdated(ss.updatedAt);
+      setLastUpdated(ss.updated_at);
     }
     setSlideshow(ss);
     setError(null);
-  }, [gymId, lastUpdated]);
+  }, [token, lastUpdated]);
 
-  // Initial load + polling for changes
   useEffect(() => {
     loadSlideshow();
     const interval = setInterval(loadSlideshow, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [loadSlideshow]);
 
-  // Auto-advance slides
   useEffect(() => {
     if (!slideshow || slideshow.slides.length === 0) return;
 
@@ -54,23 +49,19 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ gymId }) => {
       return;
     }
 
-    const duration = (currentSlide.durationSeconds || 8) * 1000;
-
-    // Fade in
+    const duration = (currentSlide.duration_seconds || 8) * 1000;
     setFade(true);
 
     const timer = setTimeout(() => {
-      // Fade out before transitioning
       setFade(false);
       setTimeout(() => {
         setCurrentIndex(prev => (prev + 1) % slideshow.slides.length);
-      }, 500); // fade-out duration
+      }, 500);
     }, duration - 500);
 
     return () => clearTimeout(timer);
   }, [currentIndex, slideshow]);
 
-  // Fullscreen on click
   const requestFullscreen = () => {
     document.documentElement.requestFullscreen?.();
   };
@@ -94,28 +85,24 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ gymId }) => {
   const currentSlide = slideshow.slides[currentIndex];
   if (!currentSlide) return null;
 
+  const imageUrl = `/${currentSlide.image_path}`;
+
   return (
     <div
       className="fixed inset-0 bg-black cursor-none select-none"
       onClick={requestFullscreen}
     >
-      {/* Slide image - fullscreen */}
-      <div
-        className={`absolute inset-0 transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'}`}
-      >
+      <div className={`absolute inset-0 transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'}`}>
         <img
-          src={currentSlide.imageUrl}
+          src={imageUrl}
           alt={currentSlide.title}
           className="w-full h-full object-contain"
           draggable={false}
         />
       </div>
 
-      {/* Optional overlay with slide info */}
       {(currentSlide.title || currentSlide.description) && (
-        <div
-          className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-8 pt-20 transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'}`}
-        >
+        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-8 pt-20 transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'}`}>
           {currentSlide.title && (
             <h2 className="text-white text-3xl font-bold mb-1">{currentSlide.title}</h2>
           )}
@@ -125,10 +112,9 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ gymId }) => {
         </div>
       )}
 
-      {/* Progress dots */}
       {slideshow.slides.length > 1 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-          {slideshow.slides.map((_, i) => (
+          {slideshow.slides.map((_: any, i: number) => (
             <div
               key={i}
               className={`w-2 h-2 rounded-full transition-all duration-300 ${i === currentIndex ? 'bg-white w-6' : 'bg-white/30'}`}
