@@ -79,10 +79,11 @@ router.delete('/api/slideshows/:id', requireAuth, (req, res) => {
 // --- Slides (protected) ---
 
 router.post('/api/slideshows/:id/slides', requireAuth, (req, res) => {
-  const { title, description, durationSeconds, imageData } = req.body;
-  if (!imageData) { res.status(400).json({ error: 'Image data required' }); return; }
+  const { title, description, durationSeconds, imageData, mediaData } = req.body;
+  const data = mediaData || imageData;
+  if (!data) { res.status(400).json({ error: 'Media data required' }); return; }
   try {
-    const slide = db.addSlide(param(req, 'id'), title || '', description || '', durationSeconds || 8, imageData);
+    const slide = db.addSlide(param(req, 'id'), title || '', description || '', durationSeconds || 8, data);
     res.json(slide);
   } catch (err: any) {
     res.status(400).json({ error: err.message });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '../services/api';
 
 interface SlideshowDisplayProps {
@@ -49,18 +49,27 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
       return;
     }
 
-    const duration = (currentSlide.duration_seconds || 8) * 1000;
     setFade(true);
 
-    const timer = setTimeout(() => {
-      setFade(false);
-      setTimeout(() => {
-        setCurrentIndex(prev => (prev + 1) % slideshow.slides.length);
-      }, 500);
-    }, duration - 500);
+    // Videos advance when they finish playing (handled by onEnded)
+    if (currentSlide.media_type === 'video') {
+      return;
+    }
 
+    // Images advance after their duration
+    const duration = (currentSlide.duration_seconds || 8) * 1000;
+    const timer = setTimeout(() => advanceSlide(), duration);
     return () => clearTimeout(timer);
   }, [currentIndex, slideshow]);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const advanceSlide = () => {
+    setFade(false);
+    setTimeout(() => {
+      setCurrentIndex(prev => (prev + 1) % slideshow!.slides.length);
+    }, 500);
+  };
 
   const requestFullscreen = () => {
     document.documentElement.requestFullscreen?.();
@@ -85,7 +94,8 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   const currentSlide = slideshow.slides[currentIndex];
   if (!currentSlide) return null;
 
-  const imageUrl = `/${currentSlide.image_path}`;
+  const mediaUrl = `/${currentSlide.image_path}`;
+  const isVideoSlide = currentSlide.media_type === 'video';
 
   return (
     <div
@@ -93,12 +103,25 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
       onClick={requestFullscreen}
     >
       <div className={`absolute inset-0 transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'}`}>
-        <img
-          src={imageUrl}
-          alt={currentSlide.title}
-          className="w-full h-full object-contain"
-          draggable={false}
-        />
+        {isVideoSlide ? (
+          <video
+            ref={videoRef}
+            key={currentSlide.id}
+            src={mediaUrl}
+            className="w-full h-full object-contain"
+            autoPlay
+            muted
+            playsInline
+            onEnded={advanceSlide}
+          />
+        ) : (
+          <img
+            src={mediaUrl}
+            alt={currentSlide.title}
+            className="w-full h-full object-contain"
+            draggable={false}
+          />
+        )}
       </div>
 
       {(currentSlide.title || currentSlide.description) && (

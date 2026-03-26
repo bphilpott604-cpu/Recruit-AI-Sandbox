@@ -46,6 +46,7 @@ export async function initDb() {
       title TEXT DEFAULT '',
       description TEXT DEFAULT '',
       image_path TEXT NOT NULL,
+      media_type TEXT DEFAULT 'image',
       duration_seconds INTEGER DEFAULT 8,
       sort_order INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -149,24 +150,26 @@ export function deleteSlideshow(id: string) {
 // Slides
 // ---------------------------------------------------------------------------
 
-export function addSlide(slideshowId: string, title: string, description: string, durationSeconds: number, base64Image: string) {
+export function addSlide(slideshowId: string, title: string, description: string, durationSeconds: number, base64Data: string) {
   const id = genId();
   const maxOrder = getOne('SELECT MAX(sort_order) as max_order FROM slides WHERE slideshow_id = ?', [slideshowId]);
   const sortOrder = (maxOrder?.max_order ?? -1) + 1;
 
-  // Save image to disk
-  const match = base64Image.match(/^data:(image\/\w+);base64,(.+)$/);
-  if (!match) throw new Error('Invalid image data');
-  const ext = match[1].split('/')[1] || 'png';
-  const buffer = Buffer.from(match[2], 'base64');
+  // Save media to disk (image or video)
+  const match = base64Data.match(/^data:((image|video)\/[\w+]+);base64,(.+)$/);
+  if (!match) throw new Error('Invalid media data — must be an image or video');
+  const mimeType = match[1];
+  const mediaType = match[2]; // 'image' or 'video'
+  const ext = mimeType.split('/')[1].replace('+', '') || (mediaType === 'video' ? 'mp4' : 'png');
+  const buffer = Buffer.from(match[3], 'base64');
   const filename = `${id}.${ext}`;
-  const imagePath = `uploads/${filename}`;
-  fs.writeFileSync(path.join(DATA_DIR, imagePath), buffer);
+  const mediaPath = `uploads/${filename}`;
+  fs.writeFileSync(path.join(DATA_DIR, mediaPath), buffer);
 
   db.run(`
-    INSERT INTO slides (id, slideshow_id, title, description, image_path, duration_seconds, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [id, slideshowId, title, description, imagePath, durationSeconds, sortOrder]);
+    INSERT INTO slides (id, slideshow_id, title, description, image_path, media_type, duration_seconds, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `, [id, slideshowId, title, description, mediaPath, mediaType, durationSeconds, sortOrder]);
 
   db.run("UPDATE slideshows SET updated_at = datetime('now') WHERE id = ?", [slideshowId]);
   persist();

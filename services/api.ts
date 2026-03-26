@@ -65,7 +65,7 @@ export async function deleteSlideshow(id: string) {
 
 // --- Slides ---
 
-export async function addSlide(slideshowId: string, data: { title: string; description: string; durationSeconds: number; imageData: string }) {
+export async function addSlide(slideshowId: string, data: { title: string; description: string; durationSeconds: number; imageData?: string; mediaData?: string }) {
   return request(`/api/slideshows/${slideshowId}/slides`, {
     method: 'POST',
     body: JSON.stringify(data),
