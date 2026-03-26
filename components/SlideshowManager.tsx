@@ -334,20 +334,25 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
     const files = e.target.files;
     if (!files) return;
     setUploading(true);
-    for (const file of Array.from(files) as File[]) {
-      const isImage = file.type.startsWith('image/');
-      const isVideo = file.type.startsWith('video/');
-      if (!isImage && !isVideo) continue;
-      await api.addSlide(slideshow.id, {
-        title: file.name.replace(/\.[^.]+$/, ''),
-        description: '',
-        durationSeconds: isVideo ? 0 : 8,
-        file: file,
-      });
+    try {
+      for (const file of Array.from(files) as File[]) {
+        const isImage = file.type.startsWith('image/');
+        const isVideo = file.type.startsWith('video/');
+        if (!isImage && !isVideo) continue;
+        await api.addSlide(slideshow.id, {
+          title: file.name.replace(/\.[^.]+$/, ''),
+          description: '',
+          durationSeconds: isVideo ? 0 : 8,
+          file: file,
+        });
+      }
+      onUpdate();
+    } catch (err: any) {
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-    setUploading(false);
-    onUpdate();
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleRemoveSlide = async (id: string) => {
