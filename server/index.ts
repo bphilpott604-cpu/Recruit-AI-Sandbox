@@ -9,7 +9,7 @@ const PORT = parseInt(process.env.PORT || '3001');
 
 // --- Middleware ---
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'change-me-in-production',
