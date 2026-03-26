@@ -65,6 +65,12 @@ export async function initDb() {
     )
   `);
 
+  // Migration: add media_type column if it doesn't exist (for databases created before video support)
+  const cols = execAsObjects("PRAGMA table_info(slides)");
+  if (!cols.some((c: any) => c.name === 'media_type')) {
+    db.run("ALTER TABLE slides ADD COLUMN media_type TEXT DEFAULT 'image'");
+  }
+
   persist();
 }
 
