@@ -338,12 +338,11 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
       const isImage = file.type.startsWith('image/');
       const isVideo = file.type.startsWith('video/');
       if (!isImage && !isVideo) continue;
-      const dataUrl = await api.fileToDataUrl(file);
       await api.addSlide(slideshow.id, {
         title: file.name.replace(/\.[^.]+$/, ''),
         description: '',
-        durationSeconds: isVideo ? 0 : 8, // 0 = play full video
-        mediaData: dataUrl,
+        durationSeconds: isVideo ? 0 : 8,
+        file: file,
       });
     }
     setUploading(false);

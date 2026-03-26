@@ -1,7 +1,21 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
+import { randomBytes } from 'crypto';
 import * as db from './db.js';
 
 const router = Router();
+
+// Multer config — save uploads directly to the uploads directory
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, db.UPLOADS_DIR),
+  filename: (_req, file, cb) => {
+    const unique = Date.now().toString(36) + randomBytes(4).toString('hex');
+    const ext = path.extname(file.originalname) || '.bin';
+    cb(null, `${unique}${ext}`);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 200 * 1024 * 1024 } });
 
 function param(req: Request, name: string): string {
   const val = req.params[name];
@@ -78,15 +92,33 @@ router.delete('/api/slideshows/:id', requireAuth, (req, res) => {
 
 // --- Slides (protected) ---
 
-router.post('/api/slideshows/:id/slides', requireAuth, (req, res) => {
-  const { title, description, durationSeconds, imageData, mediaData } = req.body;
-  const data = mediaData || imageData;
-  if (!data) { res.status(400).json({ error: 'Media data required' }); return; }
-  try {
-    const slide = db.addSlide(param(req, 'id'), title || '', description || '', durationSeconds || 8, data);
-    res.json(slide);
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+router.post('/api/slideshows/:id/slides', requireAuth, upload.single('file'), (req, res) => {
+  const file = req.file;
+
+  if (file) {
+    // Multipart form upload (new approach — handles large files)
+    const title = (req.body.title as string) || '';
+    const description = (req.body.description as string) || '';
+    const durationSeconds = parseInt(req.body.durationSeconds) || 8;
+    const mediaType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+    const mediaPath = `uploads/${file.filename}`;
+    try {
+      const slide = db.addSlideFromFile(param(req, 'id'), title, description, durationSeconds, mediaPath, mediaType);
+      res.json(slide);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  } else {
+    // Legacy base64 JSON upload (for backwards compatibility)
+    const { title, description, durationSeconds, imageData, mediaData } = req.body;
+    const data = mediaData || imageData;
+    if (!data) { res.status(400).json({ error: 'Media data required' }); return; }
+    try {
+      const slide = db.addSlide(param(req, 'id'), title || '', description || '', durationSeconds || 8, data);
+      res.json(slide);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   }
 });
 

@@ -176,6 +176,21 @@ export function addSlide(slideshowId: string, title: string, description: string
   return getOne('SELECT * FROM slides WHERE id = ?', [id]);
 }
 
+export function addSlideFromFile(slideshowId: string, title: string, description: string, durationSeconds: number, mediaPath: string, mediaType: string) {
+  const id = genId();
+  const maxOrder = getOne('SELECT MAX(sort_order) as max_order FROM slides WHERE slideshow_id = ?', [slideshowId]);
+  const sortOrder = (maxOrder?.max_order ?? -1) + 1;
+
+  db.run(`
+    INSERT INTO slides (id, slideshow_id, title, description, image_path, media_type, duration_seconds, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `, [id, slideshowId, title, description, mediaPath, mediaType, durationSeconds, sortOrder]);
+
+  db.run("UPDATE slideshows SET updated_at = datetime('now') WHERE id = ?", [slideshowId]);
+  persist();
+  return getOne('SELECT * FROM slides WHERE id = ?', [id]);
+}
+
 export function updateSlide(slideId: string, updates: { title?: string; description?: string; durationSeconds?: number }) {
   const parts: string[] = [];
   const values: any[] = [];

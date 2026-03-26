@@ -65,7 +65,32 @@ export async function deleteSlideshow(id: string) {
 
 // --- Slides ---
 
-export async function addSlide(slideshowId: string, data: { title: string; description: string; durationSeconds: number; imageData?: string; mediaData?: string }) {
+export async function addSlide(slideshowId: string, data: { title: string; description: string; durationSeconds: number; file?: File; imageData?: string; mediaData?: string }) {
+  if (data.file) {
+    // Multipart form upload — efficient for large files (no base64 inflation)
+    const formData = new FormData();
+    formData.append('file', data.file);
+    formData.append('title', data.title);
+    formData.append('description', data.description);
+    formData.append('durationSeconds', String(data.durationSeconds));
+
+    const res = await fetch(`/api/slideshows/${slideshowId}/slides`, {
+      method: 'POST',
+      body: formData,
+      // Note: do NOT set Content-Type header — browser sets it with boundary
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+      throw new Error('Not authenticated');
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Upload failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  // Legacy base64 JSON fallback
   return request(`/api/slideshows/${slideshowId}/slides`, {
     method: 'POST',
     body: JSON.stringify(data),
