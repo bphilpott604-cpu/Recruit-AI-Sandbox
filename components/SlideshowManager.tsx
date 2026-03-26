@@ -335,13 +335,15 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
     if (!files) return;
     setUploading(true);
     for (const file of Array.from(files) as File[]) {
-      if (!file.type.startsWith('image/')) continue;
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      if (!isImage && !isVideo) continue;
       const dataUrl = await api.fileToDataUrl(file);
       await api.addSlide(slideshow.id, {
         title: file.name.replace(/\.[^.]+$/, ''),
         description: '',
-        durationSeconds: 8,
-        imageData: dataUrl,
+        durationSeconds: isVideo ? 0 : 8, // 0 = play full video
+        mediaData: dataUrl,
       });
     }
     setUploading(false);
@@ -388,10 +390,11 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
     await api.reorderSlides(slideshow.id, reordered.map(s => s.id));
   };
 
-  const getImageUrl = (slide: any) => {
-    // Server returns image_path like "uploads/abc.png", serve from /uploads/
+  const getMediaUrl = (slide: any) => {
     return `/${slide.image_path}`;
   };
+
+  const isVideo = (slide: any) => slide.media_type === 'video';
 
   return (
     <div className="space-y-6">
@@ -423,14 +426,14 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
             <svg className="w-10 h-10 mx-auto text-slate-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <p className="text-sm text-slate-500 font-medium">Click to upload images</p>
-            <p className="text-xs text-slate-400 mt-1">PNG, JPG, or GIF. Multiple files supported.</p>
+            <p className="text-sm text-slate-500 font-medium">Click to upload images or videos</p>
+            <p className="text-xs text-slate-400 mt-1">PNG, JPG, GIF, MP4, MOV. Multiple files supported.</p>
           </>
         )}
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           onChange={handleFileUpload}
           className="hidden"
@@ -465,8 +468,17 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
               </div>
 
               {/* Thumbnail */}
-              <div className="w-32 h-20 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
-                <img src={getImageUrl(slide)} alt={slide.title} className="w-full h-full object-cover" />
+              <div className="w-32 h-20 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0 relative">
+                {isVideo(slide) ? (
+                  <>
+                    <video src={getMediaUrl(slide)} className="w-full h-full object-cover" muted />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <svg className="w-8 h-8 text-white/90" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                    </div>
+                  </>
+                ) : (
+                  <img src={getMediaUrl(slide)} alt={slide.title} className="w-full h-full object-cover" />
+                )}
               </div>
 
               {/* Details */}
@@ -483,18 +495,24 @@ const SlideshowEditor: React.FC<SlideshowEditorProps> = ({ slideshow, onUpdate }
                   className="w-full text-xs text-slate-500 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-emerald-500 outline-none px-1"
                   placeholder="Optional description"
                 />
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-400">Duration:</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={120}
-                    defaultValue={slide.duration_seconds}
-                    onBlur={e => handleUpdateSlide(slide.id, { durationSeconds: parseInt(e.target.value) || 8 })}
-                    className="w-16 text-xs px-2 py-1 border border-slate-200 rounded text-center focus:ring-1 focus:ring-emerald-500 outline-none"
-                  />
-                  <span className="text-xs text-slate-400">seconds</span>
-                </div>
+                {isVideo(slide) ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded font-medium">Video — plays full length</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-400">Duration:</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      defaultValue={slide.duration_seconds}
+                      onBlur={e => handleUpdateSlide(slide.id, { durationSeconds: parseInt(e.target.value) || 8 })}
+                      className="w-16 text-xs px-2 py-1 border border-slate-200 rounded text-center focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                    <span className="text-xs text-slate-400">seconds</span>
+                  </div>
+                )}
               </div>
 
               {/* Remove */}
