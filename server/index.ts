@@ -1,7 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import path from 'path';
-import { DATA_DIR } from './db.js';
+import { DATA_DIR, initDb } from './db.js';
 import routes from './routes.js';
 
 const app = express();
@@ -40,10 +40,15 @@ app.get('*', (_req, res) => {
 
 // --- Start ---
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  if (!process.env.ADMIN_PASSWORD) {
-    console.warn('WARNING: ADMIN_PASSWORD not set. Set it as an environment variable.');
-    console.warn('  Example: ADMIN_PASSWORD=your-secret-password npm start');
-  }
+initDb().then(() => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    if (!process.env.ADMIN_PASSWORD) {
+      console.warn('WARNING: ADMIN_PASSWORD not set. Set it as an environment variable.');
+      console.warn('  Example: ADMIN_PASSWORD=your-secret-password npm start');
+    }
+  });
+}).catch((err) => {
+  console.error('Failed to initialise database:', err);
+  process.exit(1);
 });
