@@ -124,17 +124,6 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
         )}
       </div>
 
-      {(currentSlide.title || currentSlide.description) && (
-        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-8 pt-20 transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'}`}>
-          {currentSlide.title && (
-            <h2 className="text-white text-3xl font-bold mb-1">{currentSlide.title}</h2>
-          )}
-          {currentSlide.description && (
-            <p className="text-white/80 text-lg">{currentSlide.description}</p>
-          )}
-        </div>
-      )}
-
       {slideshow.slides.length > 1 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
           {slideshow.slides.map((_: any, i: number) => (
