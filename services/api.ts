@@ -142,9 +142,14 @@ export async function deleteGym(id: string) {
 // --- Display (public, no auth needed) ---
 
 export async function getDisplaySlideshow(token: string) {
-  const res = await fetch(`/api/display/${token}`);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`/api/display/${token}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    // Network error — return undefined to signal "try again later" (vs null = no slideshow)
+    return undefined;
+  }
 }
 
 // --- File helper ---

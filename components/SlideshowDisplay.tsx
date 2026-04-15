@@ -16,7 +16,9 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
 
   const loadSlideshow = useCallback(async () => {
     const ss = await api.getDisplaySlideshow(token);
-    if (!ss) {
+    // undefined = network error; keep showing current slideshow and try again next poll
+    if (ss === undefined) return;
+    if (ss === null) {
       setError('No slideshow assigned to this display.');
       setSlideshow(null);
       return;
@@ -51,9 +53,12 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
 
     setFade(true);
 
-    // Videos advance when they finish playing (handled by onEnded)
+    // Videos advance when they finish playing (handled by onEnded), but add a
+    // safety timeout of 10 minutes in case the video stalls, fails silently,
+    // or autoplay is blocked
     if (currentSlide.media_type === 'video') {
-      return;
+      const safetyTimer = setTimeout(() => advanceSlide(), 10 * 60 * 1000);
+      return () => clearTimeout(safetyTimer);
     }
 
     // Images advance after their duration
@@ -69,6 +74,11 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
     setTimeout(() => {
       setCurrentIndex(prev => (prev + 1) % slideshow!.slides.length);
     }, 500);
+  };
+
+  const handleVideoError = () => {
+    // Video failed to load — skip to next slide instead of getting stuck
+    advanceSlide();
   };
 
   const requestFullscreen = () => {
@@ -113,6 +123,8 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
             muted
             playsInline
             onEnded={advanceSlide}
+            onError={handleVideoError}
+            onStalled={handleVideoError}
           />
         ) : (
           <img
