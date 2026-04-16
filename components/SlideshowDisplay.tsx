@@ -6,6 +6,7 @@ interface SlideshowDisplayProps {
 }
 
 const POLL_INTERVAL_MS = 30_000;
+const AUTO_REFRESH_MS = 2 * 60 * 60 * 1000; // Reload page every 2 hours as a safety reset for underpowered hardware (stuck video decoder, memory leaks, etc.)
 
 const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   const [slideshow, setSlideshow] = useState<any | null>(null);
@@ -13,6 +14,11 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   const [fade, setFade] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>('');
+
+  useEffect(() => {
+    const refreshTimer = setTimeout(() => window.location.reload(), AUTO_REFRESH_MS);
+    return () => clearTimeout(refreshTimer);
+  }, []);
 
   const loadSlideshow = useCallback(async () => {
     const ss = await api.getDisplaySlideshow(token);
