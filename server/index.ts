@@ -26,9 +26,12 @@ app.use(session({
 
 app.use(routes);
 
-// --- Serve uploaded images ---
+// --- Serve uploaded media with aggressive caching (file names are unique, so cache forever) ---
 
-app.use('/uploads', express.static(path.join(DATA_DIR, 'uploads')));
+app.use('/uploads', express.static(path.join(DATA_DIR, 'uploads'), {
+  maxAge: '30d',
+  immutable: true,
+}));
 
 // --- Serve frontend (production) ---
 
