@@ -132,6 +132,15 @@ router.post('/api/slideshows/:id/slides', requireAuth, (req, res, next) => {
   });
 });
 
+// NOTE: this route must be registered BEFORE the :slideId routes below,
+// otherwise Express matches "reorder" as a slideId and the reorder never runs
+router.put('/api/slideshows/:id/slides/reorder', requireAuth, (req, res) => {
+  const { slideIds } = req.body;
+  if (!Array.isArray(slideIds)) { res.status(400).json({ error: 'slideIds array required' }); return; }
+  db.reorderSlides(param(req, 'id'), slideIds);
+  res.json({ ok: true });
+});
+
 router.put('/api/slideshows/:slideshowId/slides/:slideId', requireAuth, (req, res) => {
   const { title, description, durationSeconds } = req.body;
   db.updateSlide(param(req, 'slideId'), { title, description, durationSeconds });
@@ -140,13 +149,6 @@ router.put('/api/slideshows/:slideshowId/slides/:slideId', requireAuth, (req, re
 
 router.delete('/api/slideshows/:slideshowId/slides/:slideId', requireAuth, (req, res) => {
   db.deleteSlide(param(req, 'slideId'));
-  res.json({ ok: true });
-});
-
-router.put('/api/slideshows/:id/slides/reorder', requireAuth, (req, res) => {
-  const { slideIds } = req.body;
-  if (!Array.isArray(slideIds)) { res.status(400).json({ error: 'slideIds array required' }); return; }
-  db.reorderSlides(param(req, 'id'), slideIds);
   res.json({ ok: true });
 });
 
