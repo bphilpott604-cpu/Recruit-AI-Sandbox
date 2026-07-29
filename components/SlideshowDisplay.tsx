@@ -22,6 +22,57 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
     return () => clearTimeout(refreshTimer);
   }, []);
 
+  // Keep the TV awake. Some smart TVs (notably LG webOS) show a clock
+  // screensaver when the browser displays only static images — they treat
+  // anything without active video playback as "idle", regardless of the
+  // TV's sleep-timer settings. An invisible, continuously playing video
+  // convinces the TV that playback is always in progress. A screen wake
+  // lock is also requested where the browser supports it.
+  useEffect(() => {
+    let wakeLock: any = null;
+    const requestWakeLock = async () => {
+      try {
+        wakeLock = await (navigator as any).wakeLock?.request('screen');
+      } catch { /* not supported or not allowed — keepalive video covers it */ }
+    };
+    requestWakeLock();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 2;
+    const ctx = canvas.getContext('2d');
+    const keepalive = document.createElement('video');
+    keepalive.muted = true;
+    keepalive.setAttribute('playsinline', '');
+    keepalive.style.cssText = 'position:fixed;left:-10px;top:-10px;width:2px;height:2px;opacity:0;pointer-events:none';
+    let frameTimer: ReturnType<typeof setInterval> | null = null;
+    try {
+      const stream = (canvas as any).captureStream?.(5);
+      if (stream && ctx) {
+        (keepalive as any).srcObject = stream;
+        document.body.appendChild(keepalive);
+        keepalive.play().catch(() => {});
+        // Redraw every second so the stream keeps producing frames
+        let tick = 0;
+        frameTimer = setInterval(() => {
+          ctx.fillStyle = tick++ % 2 ? '#000000' : '#010101';
+          ctx.fillRect(0, 0, 2, 2);
+        }, 1000);
+      }
+    } catch { /* keepalive is best-effort */ }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      try { wakeLock?.release?.(); } catch { /* already released */ }
+      if (frameTimer) clearInterval(frameTimer);
+      keepalive.remove();
+    };
+  }, []);
+
   // Download each media file once into local storage; play everything from
   // local copies afterwards (saves hosting bandwidth, especially for videos)
   useEffect(() => {
