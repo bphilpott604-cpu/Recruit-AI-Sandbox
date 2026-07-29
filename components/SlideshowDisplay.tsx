@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '../services/api';
+import { getLocalMediaUrl, pruneMediaCache } from '../services/mediaCache';
 
 interface SlideshowDisplayProps {
   token: string;
@@ -14,11 +15,31 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   const [fade, setFade] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>('');
+  const [localUrls, setLocalUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const refreshTimer = setTimeout(() => window.location.reload(), AUTO_REFRESH_MS);
     return () => clearTimeout(refreshTimer);
   }, []);
+
+  // Download each media file once into local storage; play everything from
+  // local copies afterwards (saves hosting bandwidth, especially for videos)
+  useEffect(() => {
+    if (!slideshow?.slides?.length) return;
+    let cancelled = false;
+    (async () => {
+      const paths = slideshow.slides.map((s: any) => `/${s.image_path}`);
+      await pruneMediaCache(paths);
+      for (const path of paths) {
+        const url = await getLocalMediaUrl(path);
+        if (cancelled) return;
+        if (url !== path) {
+          setLocalUrls(prev => (prev[path] === url ? prev : { ...prev, [path]: url }));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [slideshow?.updated_at]);
 
   const loadSlideshow = useCallback(async () => {
     const ss = await api.getDisplaySlideshow(token);
@@ -91,6 +112,19 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
     document.documentElement.requestFullscreen?.();
   };
 
+  const currentSlide = slideshow?.slides?.[currentIndex] ?? null;
+
+  // Prefer the locally stored copy; fall back to streaming from the server
+  // only if the file hasn't finished downloading yet (first boot).
+  // The choice is frozen per slide appearance so a download finishing
+  // mid-play doesn't swap the source and restart the video.
+  const directUrl = currentSlide ? `/${currentSlide.image_path}` : '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const mediaUrl = React.useMemo(
+    () => (directUrl && localUrls[directUrl]) || directUrl,
+    [currentIndex, slideshow]
+  );
+
   if (error) {
     return (
       <div className="fixed inset-0 bg-black flex items-center justify-center">
@@ -106,11 +140,8 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   }
 
   if (!slideshow) return null;
-
-  const currentSlide = slideshow.slides[currentIndex];
   if (!currentSlide) return null;
 
-  const mediaUrl = `/${currentSlide.image_path}`;
   const isVideoSlide = currentSlide.media_type === 'video';
 
   return (
