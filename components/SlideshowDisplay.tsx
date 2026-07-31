@@ -18,6 +18,13 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [localUrls, setLocalUrls] = useState<Record<string, string>>({});
   const videoStartedRef = useRef(false);
+  // Some TV browsers accept locally-stored media but silently fail to play it.
+  // When that happens we retry the slide streamed directly from the server.
+  const [useDirectMedia, setUseDirectMedia] = useState(false);
+
+  useEffect(() => {
+    setUseDirectMedia(false);
+  }, [currentIndex]);
 
   useEffect(() => {
     const refreshTimer = setTimeout(() => window.location.reload(), AUTO_REFRESH_MS);
@@ -140,8 +147,15 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
     // - absolute cap of 10 minutes in case onEnded never fires
     if (currentSlide.media_type === 'video') {
       videoStartedRef.current = false;
+      const localUrl = localUrls[`/${currentSlide.image_path}`];
       const startWatchdog = setTimeout(() => {
-        if (!videoStartedRef.current) advanceSlide();
+        if (videoStartedRef.current) return;
+        if (!useDirectMedia && localUrl) {
+          // Local copy wouldn't start — retry streamed from the server
+          setUseDirectMedia(true);
+        } else {
+          advanceSlide();
+        }
       }, VIDEO_START_TIMEOUT_MS);
       const safetyTimer = setTimeout(() => advanceSlide(), 10 * 60 * 1000);
       return () => {
@@ -154,7 +168,7 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
     const duration = (currentSlide.duration_seconds || 8) * 1000;
     const timer = setTimeout(() => advanceSlide(), duration);
     return () => clearTimeout(timer);
-  }, [currentIndex, slideshow]);
+  }, [currentIndex, slideshow, useDirectMedia]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -166,8 +180,13 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   };
 
   const handleVideoError = () => {
-    // Video failed to load — skip to next slide instead of getting stuck
-    advanceSlide();
+    // Local copy failed — retry streamed from the server; if that fails
+    // too, skip to the next slide instead of getting stuck
+    if (!useDirectMedia && mediaUrl.startsWith('blob:')) {
+      setUseDirectMedia(true);
+    } else {
+      advanceSlide();
+    }
   };
 
   const requestFullscreen = () => {
@@ -182,10 +201,11 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   // mid-play doesn't swap the source and restart the video.
   const directUrl = currentSlide ? `/${currentSlide.image_path}` : '';
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const mediaUrl = React.useMemo(
-    () => (directUrl && localUrls[directUrl]) || directUrl,
-    [currentIndex, slideshow]
-  );
+  const mediaUrl = React.useMemo(() => {
+    if (!directUrl) return '';
+    if (useDirectMedia) return directUrl;
+    return localUrls[directUrl] || directUrl;
+  }, [currentIndex, slideshow, useDirectMedia]);
 
   if (error) {
     return (
@@ -215,7 +235,7 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
         {isVideoSlide ? (
           <video
             ref={videoRef}
-            key={currentSlide.id}
+            key={currentSlide.id + (useDirectMedia ? '-direct' : '')}
             src={mediaUrl}
             className="w-full h-full object-contain"
             autoPlay
@@ -232,6 +252,9 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
             alt={currentSlide.title}
             className="w-full h-full object-contain"
             draggable={false}
+            onError={() => {
+              if (!useDirectMedia && mediaUrl.startsWith('blob:')) setUseDirectMedia(true);
+            }}
           />
         )}
       </div>
