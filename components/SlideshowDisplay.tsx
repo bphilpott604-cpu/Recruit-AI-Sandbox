@@ -8,6 +8,7 @@ interface SlideshowDisplayProps {
 
 const POLL_INTERVAL_MS = 30_000;
 const AUTO_REFRESH_MS = 4 * 60 * 60 * 1000; // Reload page every 4 hours as a safety reset
+const VIDEO_START_TIMEOUT_MS = 20_000; // Skip a video that hasn't started playing within 20s
 
 const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   const [slideshow, setSlideshow] = useState<any | null>(null);
@@ -16,6 +17,7 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [localUrls, setLocalUrls] = useState<Record<string, string>>({});
+  const videoStartedRef = useRef(false);
 
   useEffect(() => {
     const refreshTimer = setTimeout(() => window.location.reload(), AUTO_REFRESH_MS);
@@ -131,12 +133,21 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
 
     setFade(true);
 
-    // Videos advance when they finish playing (handled by onEnded), but add a
-    // safety timeout of 10 minutes in case the video stalls, fails silently,
-    // or autoplay is blocked
+    // Videos advance when they finish playing (handled by onEnded), with two
+    // backstops so a broken video can't leave the screen black:
+    // - if playback hasn't actually started within 20s (unsupported format,
+    //   download failure, autoplay blocked), skip to the next slide
+    // - absolute cap of 10 minutes in case onEnded never fires
     if (currentSlide.media_type === 'video') {
+      videoStartedRef.current = false;
+      const startWatchdog = setTimeout(() => {
+        if (!videoStartedRef.current) advanceSlide();
+      }, VIDEO_START_TIMEOUT_MS);
       const safetyTimer = setTimeout(() => advanceSlide(), 10 * 60 * 1000);
-      return () => clearTimeout(safetyTimer);
+      return () => {
+        clearTimeout(startWatchdog);
+        clearTimeout(safetyTimer);
+      };
     }
 
     // Images advance after their duration
@@ -212,7 +223,8 @@ const SlideshowDisplay: React.FC<SlideshowDisplayProps> = ({ token }) => {
             playsInline
             onEnded={advanceSlide}
             onError={handleVideoError}
-            onStalled={handleVideoError}
+            onPlaying={() => { videoStartedRef.current = true; }}
+            onTimeUpdate={() => { videoStartedRef.current = true; }}
           />
         ) : (
           <img
